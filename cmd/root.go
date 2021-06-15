@@ -76,7 +76,6 @@ func RunRoot(cmd *cobra.Command, args []string) (string, error) {
 		return "", err
 	}
 
-	// Write last commit
 	return string(out), nil
 }
 
@@ -130,7 +129,7 @@ func runRootWrapper(cmd *cobra.Command, args []string) {
 func Execute() error {
 	var rootCmd = &cobra.Command{
 		Version: defaults.Version,
-		Use:     "gch",
+		Use:     "backlog-git-pr-diff-checker",
 		Short:   "It checks Git for particular path",
 		Run:     runRootWrapper,
 	}
