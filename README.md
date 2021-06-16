@@ -11,7 +11,7 @@ go get github.com/vvatanabe/gbch/cmd/gbch/
 # Installation
 
 ```
-go get  github.com/1984weed/backlog-git-pr-diff-checker
+go get  github.com/trknhr/backlog-git-pr-diff-checker
 ```
 
 # Usage
