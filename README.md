@@ -1,13 +1,5 @@
 # backlog-git-pr-diff-checker
 
-# Requires 
-
-This tool uses [gbch](https://github.com/vvatanabe/gbch). You need install it.
-
-```
-go get github.com/vvatanabe/gbch/cmd/gbch/
-```
-
 # Installation
 
 ```
@@ -20,7 +12,7 @@ It check specific paths defined by --target-paths. You move to your target repos
 Then you run the command like this.
 
 ```
-backlog-git-pr-diff-checker --apikey=xxxx --since="5 days ago" --target-paths="./css,./js"
+backlog-git-pr-diff-checker --apikey=xxxx --since="5 days ago" --target-paths="./css,./js" --description="The new pull requests are under the /src/css/"
 ```
 
 # Options

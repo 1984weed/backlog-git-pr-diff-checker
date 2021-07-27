@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"crypto/md5"
 	"errors"
 	"fmt"
@@ -8,28 +10,45 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"text/template"
+	"time"
 
-	"github.com/1984weed/backlog-git-pr-diff-checker/defaults"
+	"github.com/trknhr/backlog-git-pr-diff-checker/defaults"
+	"github.com/trknhr/gbch"
 
-	"github.com/1984weed/backlog-git-pr-diff-checker/exit"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/trknhr/backlog-git-pr-diff-checker/exit"
+	backlog "github.com/vvatanabe/go-backlog/backlog/v2"
 )
 
 var (
 	since       string
 	apiKey      string
 	targetPaths []string
+	description string
 )
 
+func createGbch(apiKey string) *gbch.Gbch {
+	gb := &gbch.Gbch{
+		APIKey: apiKey,
+	}
+	_ = gb.Initialize(context.Background())
+
+	return gb
+}
+
 func RunRoot(cmd *cobra.Command, args []string) (string, error) {
+	fmt.Println(apiKey)
+	gbch := createGbch(apiKey)
 	initViper()
 
 	myDirHash := getMyDirHash()
 
 	var s map[string]struct {
 		LastCommit string `toml:"lastcommit"`
+		Path       string `toml:"path"`
 	}
 
 	_ = viper.Unmarshal(&s)
@@ -56,12 +75,25 @@ func RunRoot(cmd *cobra.Command, args []string) (string, error) {
 		targetPathsStr = append(targetPathsStr, fmt.Sprintf("--target-paths=%s", v))
 	}
 
-	gbchArgs := []string{fmt.Sprintf("--apikey=%s", apiKey),
-		fmt.Sprintf("--from=%s", prevCommit),
-		"-F=markdown"}
-	gbchArgs = append(gbchArgs, targetPathsStr...)
+	section, err := gbch.GetSection(context.Background(), prevCommit, "")
 
-	out, err := exec.Command("gbch", gbchArgs...).Output()
+	if err != nil {
+		return "", err
+	}
+
+	outputSection := &OutputSection{
+		Title:        "Diff PRs on this time",
+		Description:  description,
+		HTMLURL:      section.HTMLURL,
+		FromRevision: section.FromRevision,
+		ToRevision:   section.ToRevision,
+		PullRequests: section.PullRequests,
+		ChangedAt:    section.ChangedAt,
+		BaseURL:      section.BaseURL,
+		ShowUniqueID: section.ShowUniqueID,
+	}
+
+	output, err := display(outputSection)
 
 	if err != nil {
 		return "", err
@@ -70,13 +102,20 @@ func RunRoot(cmd *cobra.Command, args []string) (string, error) {
 	lastCommitOut, _ := exec.Command("bash", "-c", "git log --pretty=format:%H | head -n 1").Output()
 	viper.Set(fmt.Sprintf("%s.lastCommit", myDirHash), strings.TrimSuffix(string(lastCommitOut), "\n"))
 
+	mydir, err := os.Getwd()
+
+	if err != nil {
+		return "", err
+	}
+	viper.Set(fmt.Sprintf("%s.path", myDirHash), mydir)
+
 	err = viper.WriteConfig()
 
 	if err != nil {
 		return "", err
 	}
 
-	return string(out), nil
+	return output, nil
 }
 
 func getMD5(str string) string {
@@ -136,8 +175,39 @@ func Execute() error {
 	rootCmd.PersistentFlags().StringSliceVarP(&targetPaths, "target-paths", "p", []string{}, "Target paths you want to filter.")
 	rootCmd.PersistentFlags().StringVarP(&since, "since", "s", "", "Limit the commits to those made after the specified date.")
 	rootCmd.PersistentFlags().StringVarP(&apiKey, "apikey", "k", "", "Backlog's api key")
+	rootCmd.PersistentFlags().StringVarP(&description, "description", "d", "", "The name of this diff check")
 
 	rootCmd.Use = ""
 
 	return rootCmd.Execute()
+}
+
+type OutputSection struct {
+	Description  string
+	Title        string
+	HTMLURL      string
+	FromRevision string
+	ToRevision   string
+	PullRequests []*backlog.PullRequest
+	ChangedAt    time.Time
+	BaseURL      string
+	ShowUniqueID bool
+}
+
+var markdownTmplStr = `{{$ret := . -}}
+{{.Description}}
+# [{{.Title}}]({{.HTMLURL}}/compare/{{.FromRevision}}...{{.ToRevision}}) ({{.ChangedAt.Format "2006-01-02"}})
+{{range .PullRequests}}
+* {{.Summary}} [#{{.Number}}]({{$ret.HTMLURL}}/pullRequests/{{.Number}}) ([{{.CreatedUser.Name}}]({{$ret.BaseURL}}/user/{{.CreatedUser.UserID}})){{if and ($ret.ShowUniqueID) (.CreatedUser.NulabAccount)}} @{{.CreatedUser.NulabAccount.UniqueID}}{{end}}
+{{- end}}`
+
+func display(rs *OutputSection) (string, error) {
+	var b bytes.Buffer
+	mdTmpl, _ := template.New("md-changelog").Parse(markdownTmplStr)
+
+	err := mdTmpl.Execute(&b, rs)
+	if err != nil {
+		return "", err
+	}
+	return b.String(), nil
 }

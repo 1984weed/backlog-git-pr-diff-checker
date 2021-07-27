@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/1984weed/backlog-git-pr-diff-checker/cmd"
+	"github.com/trknhr/backlog-git-pr-diff-checker/cmd"
 )
 
 func main() {
