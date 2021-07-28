@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -30,9 +29,10 @@ var (
 	description string
 )
 
-func createGbch(apiKey string) *gbch.Gbch {
+func createGbch(apiKey string, targetPaths []string) *gbch.Gbch {
 	gb := &gbch.Gbch{
-		APIKey: apiKey,
+		APIKey:      apiKey,
+		TargetPaths: targetPaths,
 	}
 	_ = gb.Initialize(context.Background())
 
@@ -40,8 +40,7 @@ func createGbch(apiKey string) *gbch.Gbch {
 }
 
 func RunRoot(cmd *cobra.Command, args []string) (string, error) {
-	fmt.Println(apiKey)
-	gbch := createGbch(apiKey)
+	gbch := createGbch(apiKey, targetPaths)
 	initViper()
 
 	myDirHash := getMyDirHash()
@@ -58,16 +57,16 @@ func RunRoot(cmd *cobra.Command, args []string) (string, error) {
 		prevCommit = val.LastCommit
 	}
 
+	if prevCommit == "" && since == "" {
+		since = "1 day ago"
+	}
+
 	if since != "" {
-		out, err := exec.Command("bash", "-c", fmt.Sprintf("git log --since='%s' %s", since, "--pretty=format:%H | tail -n 1")).Output()
+		out, err := exec.Command("sh", "-c", fmt.Sprintf("git log --since='%s' %s", since, "--pretty=format:%H | tail -n 1")).Output()
 		if err != nil {
 			return "", err
 		}
 		prevCommit = string(out)
-	}
-
-	if prevCommit == "" {
-		return "", errors.New("It must be set since flag for first.")
 	}
 
 	targetPathsStr := []string{}
@@ -93,13 +92,11 @@ func RunRoot(cmd *cobra.Command, args []string) (string, error) {
 		ShowUniqueID: section.ShowUniqueID,
 	}
 
-	output, err := display(outputSection)
-
 	if err != nil {
 		return "", err
 	}
 
-	lastCommitOut, _ := exec.Command("bash", "-c", "git log --pretty=format:%H | head -n 1").Output()
+	lastCommitOut, _ := exec.Command("sh", "-c", "git log --pretty=format:%H | head -n 1").Output()
 	viper.Set(fmt.Sprintf("%s.lastCommit", myDirHash), strings.TrimSuffix(string(lastCommitOut), "\n"))
 
 	mydir, err := os.Getwd()
@@ -114,8 +111,11 @@ func RunRoot(cmd *cobra.Command, args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if len(outputSection.PullRequests) > 0 {
+		return display(outputSection)
+	}
 
-	return output, nil
+	return "There are no pull requests.", nil
 }
 
 func getMD5(str string) string {
