@@ -1,5 +1,5 @@
 CURRENT_REVISION = $(shell git rev-parse --short HEAD)
-BUILD_LDFLAGS = "-s -w -X github.com/1984weed/backlog-git-pr-diff-checker.revision=$(CURRENT_REVISION)"
+BUILD_LDFLAGS = "-s -w -X github.com/trknhr/backlog-git-pr-diff-checker.revision=$(CURRENT_REVISION)"
 
 deps:
 	go get -u -d

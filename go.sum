@@ -250,6 +250,8 @@ github.com/subosito/gotenv v1.2.0 h1:Slr1R9HxAlEKefgq5jn9U+DnETlIUa6HfgEzj0g5d7s
 github.com/subosito/gotenv v1.2.0/go.mod h1:N0PQaV/YGNqwC0u51sEeR/aUtSLEXKX9iv69rRypqCw=
 github.com/trknhr/gbch v0.4.3-0.20210728044600-17980b095777 h1:uK7VyT2jWWCQYBbemiuK21nAs8dRkTvPfEgsIaJg/jE=
 github.com/trknhr/gbch v0.4.3-0.20210728044600-17980b095777/go.mod h1:F2JLgecGOvnWxgxUt0pUPRadMExJjxAVYauftB3X1l4=
+github.com/trknhr/gbch v0.4.3-0.20210730070144-0b4d87c773ab h1:CACvyDhPeQlWUocriwVZCsoJhckptiXACJK+OyOsOq0=
+github.com/trknhr/gbch v0.4.3-0.20210730070144-0b4d87c773ab/go.mod h1:F2JLgecGOvnWxgxUt0pUPRadMExJjxAVYauftB3X1l4=
 github.com/vvatanabe/errsgroup v0.9.0 h1:l494Rl+BzCgcKaRw2+ugnAfuAl7iqvJsseN+hCXzEYM=
 github.com/vvatanabe/errsgroup v0.9.0/go.mod h1:hbxfMiD/jF3W9bP/wHuxDO6GYYweWjBSQI6N2EPVoHo=
 github.com/vvatanabe/gitsemvers v0.0.2 h1:GvWGixYOhjPeACA9FvbTFnJemHBMAe8TFfRUCQmVoB8=
