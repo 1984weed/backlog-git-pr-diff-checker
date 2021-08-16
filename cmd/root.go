@@ -2,20 +2,17 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"crypto/md5"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
-	"time"
 
+	"github.com/trknhr/backlog-git-pr-diff-checker/backlog_pr"
 	"github.com/trknhr/backlog-git-pr-diff-checker/defaults"
-	"github.com/trknhr/gbch"
+	"github.com/trknhr/backlog-git-pr-diff-checker/git_cmd"
 
-	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/trknhr/backlog-git-pr-diff-checker/exit"
@@ -23,27 +20,26 @@ import (
 )
 
 var (
-	since       string
-	apiKey      string
-	targetPaths []string
-	description string
+	since          string
+	apiKey         string
+	targetPaths    []string
+	description    string
+	repoDir        string
+	settingFileDir string
 )
 
-func createGbch(apiKey string, targetPaths []string) *gbch.Gbch {
-	gb := &gbch.Gbch{
-		APIKey:      apiKey,
-		TargetPaths: targetPaths,
-	}
-	_ = gb.Initialize(context.Background())
-
-	return gb
-}
-
 func RunRoot(cmd *cobra.Command, args []string) (string, error) {
-	gbch := createGbch(apiKey, targetPaths)
 	initViper()
 
-	myDirHash := getMyDirHash()
+	if repoDir == "" {
+		mydir, err := os.Getwd()
+		if err != nil {
+			cobra.CheckErr(err)
+		}
+		repoDir = mydir
+	}
+
+	myDirHash := getMyDirHash(repoDir)
 
 	var s map[string]struct {
 		LastCommit string `toml:"lastcommit"`
@@ -57,59 +53,51 @@ func RunRoot(cmd *cobra.Command, args []string) (string, error) {
 		prevCommit = val.LastCommit
 	}
 
-	if prevCommit == "" && since == "" {
-		since = "1 day ago"
-	}
+	gitCmd := git_cmd.NewGitCmd(repoDir)
 
-	if since != "" {
-		out, err := exec.Command("sh", "-c", fmt.Sprintf("git log --since='%s' %s", since, "--pretty=format:%H | tail -n 1")).Output()
-		if err != nil {
-			return "", err
+	if prevCommit == "" || since != "" {
+		if since == "" {
+			since = "1 day ago"
 		}
-		prevCommit = string(out)
+		output, err := gitCmd.Exec("log", "--reverse", fmt.Sprintf("--until='%s'", since), "--pretty=format:%H", "-1")
+		if err != nil {
+			cobra.CheckErr(err)
+		}
+
+		prevCommit = output
 	}
 
-	targetPathsStr := []string{}
-	for _, v := range targetPaths {
-		targetPathsStr = append(targetPathsStr, fmt.Sprintf("--target-paths=%s", v))
-	}
-
-	section, err := gbch.GetSection(context.Background(), prevCommit, "")
+	section, err := backlog_pr.GetPullRequest(&backlog_pr.BacklogGit{
+		GitCmd:      gitCmd,
+		LastCommit:  prevCommit,
+		ApiKey:      apiKey,
+		TargetPaths: targetPaths,
+	})
 
 	if err != nil {
-		return "", err
+		cobra.CheckErr(err)
 	}
 
 	outputSection := &OutputSection{
 		Title:        "Diff PRs on this time",
 		Description:  description,
-		HTMLURL:      section.HTMLURL,
-		FromRevision: section.FromRevision,
-		ToRevision:   section.ToRevision,
+		RepoURL:      section.RepoURL,
 		PullRequests: section.PullRequests,
-		ChangedAt:    section.ChangedAt,
-		BaseURL:      section.BaseURL,
-		ShowUniqueID: section.ShowUniqueID,
 	}
 
 	if err != nil {
-		return "", err
+		cobra.CheckErr(err)
 	}
 
-	lastCommitOut, _ := exec.Command("sh", "-c", "git log --pretty=format:%H | head -n 1").Output()
+	lastCommitOut, _ := gitCmd.Exec("log", "-n", "1", "--pretty=format:%H")
 	viper.Set(fmt.Sprintf("%s.lastCommit", myDirHash), strings.TrimSuffix(string(lastCommitOut), "\n"))
 
-	mydir, err := os.Getwd()
-
-	if err != nil {
-		return "", err
-	}
-	viper.Set(fmt.Sprintf("%s.path", myDirHash), mydir)
+	viper.Set(fmt.Sprintf("%s.path", myDirHash), repoDir)
 
 	err = viper.WriteConfig()
 
 	if err != nil {
-		return "", err
+		cobra.CheckErr(err)
 	}
 	if len(outputSection.PullRequests) > 0 {
 		return display(outputSection)
@@ -123,22 +111,19 @@ func getMD5(str string) string {
 	return fmt.Sprintf("%x", md5.Sum(data))
 }
 
-func getMyDirHash() string {
-	mydir, err := os.Getwd()
-
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	return getMD5(mydir)
+func getMyDirHash(dir string) string {
+	return getMD5(dir)
 }
 
 func initViper() {
-	home, err := homedir.Dir()
-
-	cobra.CheckErr(err)
-
-	configHome := home
+	if settingFileDir == "" {
+		dirname, err := os.UserHomeDir()
+		if err != nil {
+			cobra.CheckErr(err)
+		}
+		settingFileDir = dirname
+	}
+	configHome := settingFileDir
 	configName := ".backlog-git-pr-diff-checker"
 	configType := "toml"
 
@@ -149,7 +134,7 @@ func initViper() {
 
 	configPath := filepath.Join(configHome, configName+"."+configType)
 
-	_, err = os.Stat(configPath)
+	_, err := os.Stat(configPath)
 
 	if !os.IsExist(err) {
 		if _, err := os.Create(configPath); err != nil {
@@ -165,40 +150,39 @@ func runRootWrapper(cmd *cobra.Command, args []string) {
 		exit.Succeed(result)
 	}
 }
+
+var RootCmd = &cobra.Command{
+	Version: defaults.Version,
+	Use:     "backlog-git-pr-diff-checker",
+	Short:   "It checks Git for particular path",
+	Run:     runRootWrapper,
+}
+
 func Execute() error {
-	var rootCmd = &cobra.Command{
-		Version: defaults.Version,
-		Use:     "backlog-git-pr-diff-checker",
-		Short:   "It checks Git for particular path",
-		Run:     runRootWrapper,
-	}
-	rootCmd.PersistentFlags().StringSliceVarP(&targetPaths, "target-paths", "p", []string{}, "Target paths you want to filter.")
-	rootCmd.PersistentFlags().StringVarP(&since, "since", "s", "", "Limit the commits to those made after the specified date.")
-	rootCmd.PersistentFlags().StringVarP(&apiKey, "apikey", "k", "", "Backlog's api key")
-	rootCmd.PersistentFlags().StringVarP(&description, "description", "d", "", "The name of this diff check")
+	RootCmd.PersistentFlags().StringSliceVarP(&targetPaths, "target-paths", "p", []string{}, "Target paths you want to filter.")
+	RootCmd.PersistentFlags().StringVarP(&since, "since", "s", "", "Limit the commits to those made after the specified date.")
+	RootCmd.PersistentFlags().StringVarP(&apiKey, "apikey", "k", "", "Backlog's api key")
+	RootCmd.PersistentFlags().StringVarP(&description, "description", "d", "", "The name of this diff check")
+	RootCmd.PersistentFlags().StringVarP(&repoDir, "repoDir", "r", "./", "The name of this diff check")
+	RootCmd.PersistentFlags().StringVarP(&settingFileDir, "settingFileDir", "f", "", "The path of the setting file")
 
-	rootCmd.Use = ""
+	RootCmd.Use = ""
 
-	return rootCmd.Execute()
+	return RootCmd.Execute()
 }
 
 type OutputSection struct {
 	Description  string
 	Title        string
-	HTMLURL      string
-	FromRevision string
-	ToRevision   string
+	RepoURL      string
 	PullRequests []*backlog.PullRequest
-	ChangedAt    time.Time
-	BaseURL      string
-	ShowUniqueID bool
 }
 
 var markdownTmplStr = `{{$ret := . -}}
 {{.Description}}
-# [{{.Title}}]({{.HTMLURL}}/compare/{{.FromRevision}}...{{.ToRevision}}) ({{.ChangedAt.Format "2006-01-02"}})
+# {{.Title}} 
 {{range .PullRequests}}
-* {{.Summary}} [#{{.Number}}]({{$ret.HTMLURL}}/pullRequests/{{.Number}}) ([{{.CreatedUser.Name}}]({{$ret.BaseURL}}/user/{{.CreatedUser.UserID}})){{if and ($ret.ShowUniqueID) (.CreatedUser.NulabAccount)}} @{{.CreatedUser.NulabAccount.UniqueID}}{{end}}
+* {{.Summary}} [#{{.Number}}]({{$ret.RepoURL}}/pullRequests/{{.Number}}) {{.CreatedUser.Name}} 
 {{- end}}`
 
 func display(rs *OutputSection) (string, error) {
