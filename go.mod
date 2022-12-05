@@ -3,14 +3,12 @@ module github.com/trknhr/backlog-git-pr-diff-checker
 go 1.16
 
 require (
-	github.com/jessevdk/go-flags v1.5.0 // indirect
-	github.com/mitchellh/go-homedir v1.1.0
-	github.com/pkg/errors v0.9.1 // indirect
-	github.com/spf13/cast v1.4.0 // indirect
-	github.com/spf13/cobra v1.2.1
-	github.com/spf13/viper v1.8.1
-	github.com/trknhr/gbch v0.4.3-0.20210730070144-0b4d87c773ab
-	github.com/vvatanabe/go-backlog v0.9.5
-	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
-	golang.org/x/text v0.3.6 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
+	github.com/spf13/afero v1.9.3 // indirect
+	github.com/spf13/cobra v1.6.1
+	github.com/spf13/viper v1.14.0
+	github.com/vvatanabe/go-backlog v0.11.3
+	golang.org/x/sys v0.3.0 // indirect
+	golang.org/x/text v0.5.0 // indirect
 )
